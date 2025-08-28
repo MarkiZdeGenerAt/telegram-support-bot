@@ -100,6 +100,32 @@ async def handle_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE)
         )
 
 
+async def allow(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not context.args:
+        await update.message.reply_text("Использование: /allow <user_id>")
+        return
+    try:
+        user_id = int(context.args[0])
+    except ValueError:
+        await update.message.reply_text("Некорректный user_id")
+        return
+    forward_service.add_allowed_user(user_id)
+    await update.message.reply_text(f"Пользователь {user_id} добавлен.")
+
+
+async def disallow(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not context.args:
+        await update.message.reply_text("Использование: /disallow <user_id>")
+        return
+    try:
+        user_id = int(context.args[0])
+    except ValueError:
+        await update.message.reply_text("Некорректный user_id")
+        return
+    forward_service.remove_allowed_user(user_id)
+    await update.message.reply_text(f"Пользователь {user_id} удалён.")
+
+
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.error("Exception while handling an update:", exc_info=context.error)
     if isinstance(update, Update) and update.effective_message:
@@ -129,6 +155,12 @@ def main() -> None:
 
         application.add_handler(CommandHandler("start", start))
         application.add_handler(CommandHandler("cancel", cancel))
+        application.add_handler(
+            CommandHandler("allow", allow, filters.Chat(ADMIN_CHAT_IDS))
+        )
+        application.add_handler(
+            CommandHandler("disallow", disallow, filters.Chat(ADMIN_CHAT_IDS))
+        )
         application.add_handler(
             MessageHandler(
                 (filters.GAME | filters.LOCATION) & filters.ChatType.PRIVATE,

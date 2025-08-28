@@ -1,69 +1,82 @@
 import os
 import logging
-from typing import Dict, Tuple, List
+from typing import List
 
 from dotenv import load_dotenv
-from telegram import Update
-from telegram.ext import (
-    Application,
-    CommandHandler,
-    MessageHandler,
-    ConversationHandler,
-    ContextTypes,
-    filters,
-)
+from aiogram import Bot, Dispatcher, F
+from aiogram.filters import Command, CommandStart
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.types import Message, Update
+from aiogram.types.error_event import ErrorEvent
+
+from keyboards import user as user_kb
+from services.forwarding import ForwardService
 
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-FORWARD_MAP_KEY = "forward_map"
 ADMIN_CHAT_IDS: List[int] = []
-WAITING_FOR_MESSAGE = 1
+forward_service = ForwardService()
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text(
-        "Здравствуйте! Напишите ваш вопрос, и оператор скоро ответит."
-        "\nДля отмены отправьте /cancel."
-    )
-    return WAITING_FOR_MESSAGE
 
-async def handle_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    forward_map: Dict[Tuple[int, int], int] = context.bot_data.setdefault(
-        FORWARD_MAP_KEY, {}
+class SupportDialog(StatesGroup):
+    waiting_for_message = State()
+
+
+async def cmd_start(message: Message, state: FSMContext) -> None:
+    await state.set_state(SupportDialog.waiting_for_message)
+    await message.answer(
+        "Здравствуйте! Напишите ваш вопрос, и оператор скоро ответит.\n"
+        "Для отмены отправьте /cancel.",
+        reply_markup=user_kb.cancel_keyboard(),
     )
+
+
+async def cmd_cancel(message: Message, state: FSMContext) -> None:
+    await state.clear()
+    await message.answer(
+        "Диалог завершен. Используйте /start для нового запроса.",
+        reply_markup=user_kb.remove_keyboard(),
+    )
+
+
+async def handle_user_message(message: Message, state: FSMContext) -> None:
     for admin_id in ADMIN_CHAT_IDS:
-        forwarded = await update.message.forward(admin_id)
-        forward_map[(admin_id, forwarded.message_id)] = update.effective_chat.id
+        forwarded = await message.forward(admin_id)
+        forward_service.record_forward(admin_id, forwarded.message_id, message.chat.id)
         logger.info(
             "Forwarded message %s from %s to admin %s",
             forwarded.message_id,
-            update.effective_chat.id,
+            message.chat.id,
             admin_id,
         )
-    return WAITING_FOR_MESSAGE
 
 
-async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text("Диалог завершен. Используйте /start для нового запроса.")
-    return ConversationHandler.END
+async def handle_unsupported(message: Message) -> None:
+    await message.answer("Поддерживаются только текстовые сообщения.")
 
-async def handle_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if update.effective_chat.id not in ADMIN_CHAT_IDS:
+
+async def handle_admin_reply(message: Message) -> None:
+    if message.chat.id not in ADMIN_CHAT_IDS:
         return
-    if not update.message.reply_to_message:
+    if not message.reply_to_message:
         return
-    forward_map: Dict[Tuple[int, int], int] = context.bot_data.get(FORWARD_MAP_KEY, {})
-    key = (update.effective_chat.id, update.message.reply_to_message.message_id)
-    user_chat_id = forward_map.get(key)
+    user_chat_id = forward_service.get_user_chat_id(
+        message.chat.id, message.reply_to_message.message_id
+    )
     if user_chat_id:
-        await update.message.copy(chat_id=user_chat_id)
+        await message.copy_to(user_chat_id)
         logger.info(
-            "Relayed reply from admin %s to user %s", update.effective_chat.id, user_chat_id
+            "Relayed reply from admin %s to user %s",
+            message.chat.id,
+            user_chat_id,
         )
 
-async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
-    logger.exception("Exception while handling an update:", exc_info=context.error)
+
+async def error_handler(event: ErrorEvent) -> None:
+    logger.exception("Exception while handling an update:", exc_info=event.exception)
 
 
 async def main() -> None:
@@ -75,29 +88,34 @@ async def main() -> None:
     global ADMIN_CHAT_IDS
     ADMIN_CHAT_IDS = [int(x) for x in admin_ids_str.split(",") if x.strip()]
 
-    application = Application.builder().token(token).build()
+    bot = Bot(token)
+    dp = Dispatcher()
 
-    user_conversation = ConversationHandler(
-        entry_points=[CommandHandler("start", start, filters.ChatType.PRIVATE)],
-        states={
-            WAITING_FOR_MESSAGE: [
-                MessageHandler(
-                    filters.ChatType.PRIVATE & ~filters.COMMAND, handle_user_message
-                )
-            ]
-        },
-        fallbacks=[CommandHandler("cancel", cancel, filters.ChatType.PRIVATE)],
+    dp.message.register(cmd_start, CommandStart(), F.chat.type == "private")
+    dp.message.register(cmd_cancel, Command("cancel"), F.chat.type == "private")
+    dp.message.register(
+        handle_user_message,
+        SupportDialog.waiting_for_message,
+        F.text,
+        F.chat.type == "private",
+    )
+    dp.message.register(
+        handle_unsupported,
+        SupportDialog.waiting_for_message,
+        F.chat.type == "private",
+    )
+    dp.message.register(
+        handle_admin_reply,
+        F.chat.id.in_(ADMIN_CHAT_IDS),
+        F.reply_to_message,
     )
 
-    application.add_handler(user_conversation)
-    application.add_handler(MessageHandler(filters.ALL, handle_admin_reply))
-    application.add_error_handler(error_handler)
+    dp.errors.register(error_handler)
 
-    await application.initialize()
-    await application.start()
-    await application.updater.start_polling()
-    await application.updater.idle()
+    await dp.start_polling(bot)
+
 
 if __name__ == "__main__":
     import asyncio
+
     asyncio.run(main())

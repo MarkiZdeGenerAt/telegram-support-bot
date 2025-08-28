@@ -60,6 +60,16 @@ class ForwardService:
         self.conn.execute("INSERT OR IGNORE INTO allowed_users(user_id) VALUES (?)", (user_id,))
         self.conn.commit()
 
+    def remove_allowed_user(self, user_id: int) -> None:
+        """Remove a user from the allowed users list."""
+        self.conn.execute("DELETE FROM allowed_users WHERE user_id=?", (user_id,))
+        self.conn.commit()
+
+    def get_allowed_users(self) -> list[int]:
+        """Return a list of all allowed user IDs."""
+        cur = self.conn.execute("SELECT user_id FROM allowed_users")
+        return [row[0] for row in cur.fetchall()]
+
     def is_allowed(self, user_id: int) -> bool:
         cur_total = self.conn.execute("SELECT COUNT(*) FROM allowed_users")
         total = cur_total.fetchone()[0]

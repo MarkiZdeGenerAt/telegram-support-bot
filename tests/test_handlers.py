@@ -80,3 +80,22 @@ def test_handle_admin_reply_uses_mapping(application):
     application.bot.copy_message.assert_awaited_once_with(
         chat_id=200, from_chat_id=1, message_id=20
     )
+
+
+def test_allow_and_disallow_commands(application):
+    bot.ADMIN_CHAT_IDS = [1]
+    bot.forward_service = ForwardService(":memory:")
+    # allow command
+    message = DummyMessage(1)
+    update = DummyUpdate(message, user_id=1, chat_id=1)
+    context = SimpleNamespace(args=["50"], bot=application.bot)
+    asyncio.run(bot.allow(update, context))
+    assert 50 in bot.forward_service.get_allowed_users()
+    message.reply_text.assert_awaited_once()
+    # disallow command
+    message2 = DummyMessage(2)
+    update2 = DummyUpdate(message2, user_id=1, chat_id=1)
+    context2 = SimpleNamespace(args=["50"], bot=application.bot)
+    asyncio.run(bot.disallow(update2, context2))
+    assert 50 not in bot.forward_service.get_allowed_users()
+    message2.reply_text.assert_awaited_once()

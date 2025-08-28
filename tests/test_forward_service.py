@@ -24,8 +24,18 @@ def test_access_control():
     assert not service.is_allowed(3)
 
 
+def test_manage_allowed_users():
+    service = ForwardService(":memory:")
+    service.add_allowed_user(10)
+    service.add_allowed_user(11)
+    assert set(service.get_allowed_users()) == {10, 11}
+    service.remove_allowed_user(10)
+    assert service.get_allowed_users() == [11]
+
+
 def test_close_prevents_further_operations():
     service = ForwardService(":memory:")
     service.close()
     with pytest.raises(sqlite3.ProgrammingError):
         service.record_forward(admin_id=1, forwarded_message_id=1, user_chat_id=1)
+

@@ -107,29 +107,32 @@ def main() -> None:
     db_path = os.environ.get("DB_PATH", "support.db")
     forward_service = ForwardService(db_path)
 
-    allowed_ids = os.environ.get("ALLOWED_USER_IDS", "")
-    for part in allowed_ids.split(","):
-        part = part.strip()
-        if part:
-            forward_service.add_allowed_user(int(part))
+    try:
+        allowed_ids = os.environ.get("ALLOWED_USER_IDS", "")
+        for part in allowed_ids.split(","):
+            part = part.strip()
+            if part:
+                forward_service.add_allowed_user(int(part))
 
-    application = Application.builder().token(token).build()
+        application = Application.builder().token(token).build()
 
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("cancel", cancel))
-    application.add_handler(
-        MessageHandler(filters.TEXT & filters.ChatType.PRIVATE, handle_user_message)
-    )
-    application.add_handler(
-        MessageHandler(~filters.TEXT & filters.ChatType.PRIVATE, handle_unsupported)
-    )
-    application.add_handler(
-        MessageHandler(filters.Chat(ADMIN_CHAT_IDS) & filters.REPLY, handle_admin_reply)
-    )
+        application.add_handler(CommandHandler("start", start))
+        application.add_handler(CommandHandler("cancel", cancel))
+        application.add_handler(
+            MessageHandler(filters.TEXT & filters.ChatType.PRIVATE, handle_user_message)
+        )
+        application.add_handler(
+            MessageHandler(~filters.TEXT & filters.ChatType.PRIVATE, handle_unsupported)
+        )
+        application.add_handler(
+            MessageHandler(filters.Chat(ADMIN_CHAT_IDS) & filters.REPLY, handle_admin_reply)
+        )
 
-    application.add_error_handler(error_handler)
+        application.add_error_handler(error_handler)
 
-    application.run_polling()
+        application.run_polling()
+    finally:
+        forward_service.close()
 
 
 if __name__ == "__main__":

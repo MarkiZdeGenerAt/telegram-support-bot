@@ -9,6 +9,17 @@ class ForwardService:
         self.conn = sqlite3.connect(db_path)
         self._init_db()
 
+    def close(self) -> None:
+        """Close the underlying database connection."""
+        self.conn.close()
+
+    # Context manager support -------------------------------------------------
+    def __enter__(self) -> "ForwardService":
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:  # pragma: no cover - simple
+        self.close()
+
     def _init_db(self) -> None:
         cur = self.conn.cursor()
         cur.execute(

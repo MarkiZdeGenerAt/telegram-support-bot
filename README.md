@@ -22,13 +22,18 @@ pip install -r requirements.txt
 ## Usage
 
 1. Create a bot with [@BotFather](https://t.me/BotFather) and obtain the token.
-2. Create a support group and find its chat ID.
-3. Run the bot:
+2. Create a support group and find chat IDs of all administrators.
+3. Copy `.env.example` to `.env` and fill in your values:
 
 ```bash
-export TELEGRAM_BOT_TOKEN="YOUR_TOKEN"
-export ADMIN_CHAT_ID="GROUP_CHAT_ID"
+cp .env.example .env
+# edit .env with your token and comma-separated admin IDs
+```
+
+4. Run the bot:
+
+```bash
 python bot.py
 ```
 
-Any message sent to the bot will be forwarded to the admin chat. When an operator replies to the forwarded message in the admin chat, the bot sends that reply back to the original user.
+Any message sent to the bot will be forwarded to every administrator. When an operator replies to the forwarded message in the admin chat, the bot sends that reply back to the original user. Users can stop the conversation at any time with the `/cancel` command.

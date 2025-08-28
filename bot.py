@@ -47,12 +47,22 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def handle_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if context.user_data.get("state") != "waiting":
         return
+    message = update.message
+    if not message:
+        return
     for admin_id in ADMIN_CHAT_IDS:
-        forwarded = await context.bot.forward_message(
-            chat_id=admin_id,
-            from_chat_id=update.effective_chat.id,
-            message_id=update.message.message_id,
-        )
+        if getattr(message, "text", None):
+            forwarded = await context.bot.forward_message(
+                chat_id=admin_id,
+                from_chat_id=update.effective_chat.id,
+                message_id=message.message_id,
+            )
+        else:
+            forwarded = await context.bot.copy_message(
+                chat_id=admin_id,
+                from_chat_id=update.effective_chat.id,
+                message_id=message.message_id,
+            )
         forward_service.record_forward(
             admin_id, forwarded.message_id, update.effective_chat.id
         )
@@ -64,10 +74,11 @@ async def handle_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE
         )
 
 
-async def handle_unsupported(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def handle_unsupported(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     if context.user_data.get("state") != "waiting":
-        return
-    await update.message.reply_text("Поддерживаются только текстовые сообщения.")
+        return True
+    await update.message.reply_text("Этот тип сообщения не поддерживается.")
+    return True
 
 
 async def handle_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -119,10 +130,13 @@ def main() -> None:
         application.add_handler(CommandHandler("start", start))
         application.add_handler(CommandHandler("cancel", cancel))
         application.add_handler(
-            MessageHandler(filters.TEXT & filters.ChatType.PRIVATE, handle_user_message)
+            MessageHandler(
+                (filters.GAME | filters.LOCATION) & filters.ChatType.PRIVATE,
+                handle_unsupported,
+            )
         )
         application.add_handler(
-            MessageHandler(~filters.TEXT & filters.ChatType.PRIVATE, handle_unsupported)
+            MessageHandler(filters.ALL & filters.ChatType.PRIVATE, handle_user_message)
         )
         application.add_handler(
             MessageHandler(filters.Chat(ADMIN_CHAT_IDS) & filters.REPLY, handle_admin_reply)

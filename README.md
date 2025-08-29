@@ -15,11 +15,27 @@ SQLite database.
 
 ## Installation
 
+### Ubuntu
+
 ```bash
+sudo apt update && sudo apt install -y git python3 python3-venv
 git clone https://github.com/yourusername/telegram-support-bot.git
 cd telegram-support-bot
 python3 -m venv venv
 source venv/bin/activate
+pip install -r requirements.txt
+```
+
+### Windows (PowerShell)
+
+1. [Install Python](https://www.python.org/downloads/windows/) and ensure **Add Python to PATH** is checked.
+2. Then run:
+
+```powershell
+git clone https://github.com/yourusername/telegram-support-bot.git
+cd telegram-support-bot
+python -m venv venv
+venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 ```
 
